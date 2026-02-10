@@ -4,7 +4,7 @@ from collections.abc import Awaitable, Callable
 
 from loguru import logger
 
-from .channels.base import ChannelHandler
+from .channels.base import BaseChannelHandler  # noqa: F401
 from .messages import InboundMessage, OutboundMessage
 
 

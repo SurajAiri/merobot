@@ -27,8 +27,11 @@
         }
     },
     "channels": {
-        "telegram":{
-            "enabled":false
+        "telegram": {
+            "enabled": true,
+            "type": "telegram",
+            "env_user_id": "TELEGRAM_USER_ID",
+            "env_token": "TELEGRAM_BOT_TOKEN"
         }
     }
 }

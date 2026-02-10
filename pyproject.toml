@@ -12,7 +12,11 @@ authors = [
 ]
 license = { text = "MIT license" }
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "python-telegram-bot[ext]>=21.0",
+    "loguru",
+    "python-dotenv>=1.2.1",
+]
 
 [dependency-groups]
 dev = [
