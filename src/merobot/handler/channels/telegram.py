@@ -41,7 +41,6 @@ class TelegramChannelHandler(BaseChannelHandler):
         self._token = token
         self._app: Application | None = None
         self._bot: Bot | None = None
-        self._connected = False
 
     # ------------------------------------------------------------------
     # BaseChannelHandler interface
@@ -49,7 +48,7 @@ class TelegramChannelHandler(BaseChannelHandler):
 
     async def connect(self):
         """Build the Telegram Application, register handlers, start polling."""
-        if self._connected:
+        if self._running:
             logger.warning(
                 "TelegramChannelHandler.connect() called while already connected"
             )
@@ -72,13 +71,12 @@ class TelegramChannelHandler(BaseChannelHandler):
         await self._app.start()
         await self._app.updater.start_polling(drop_pending_updates=True)
 
-        self._connected = True
         self._running = True
         logger.info("Telegram channel connected (polling)")
 
     async def disconnect(self):
         """Stop polling, shut down the Application gracefully."""
-        if not self._connected or self._app is None:
+        if not self._running or self._app is None:
             return
 
         try:
@@ -89,7 +87,6 @@ class TelegramChannelHandler(BaseChannelHandler):
         except Exception as exc:
             logger.error(f"Error during Telegram disconnect: {exc}")
         finally:
-            self._connected = False
             self._running = False
             logger.info("Telegram channel disconnected")
 

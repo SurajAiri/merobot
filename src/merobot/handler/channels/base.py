@@ -1,13 +1,8 @@
 # channel: connect/disconnect, send, receive, (start and stop) typing, etc.
 
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from merobot.handler.message_bus import MessageBus
-
+from merobot.handler.message_bus import MessageBus
 from merobot.handler.messages import InboundMessage, OutboundMessage
 
 
