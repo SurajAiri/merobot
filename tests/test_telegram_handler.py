@@ -1,4 +1,8 @@
-"""Unit tests for TelegramChannelHandler (all Telegram API calls are mocked)."""
+"""Unit tests for TelegramChannelHandler (all Telegram API calls are mocked).
+
+The channel uses BaseChannelHandler._publish_inbound() to push messages
+directly to the bus. No receive_message() or internal queue.
+"""
 
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -6,34 +10,33 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from merobot.handler.channels.telegram import TelegramChannelHandler
-from merobot.handler.messages import InboundMessage, OutboundMessage
+from merobot.handler.messages import OutboundMessage
 
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
-def mock_message_bus():
+def mock_bus():
     """A lightweight mock that quacks like MessageBus."""
     bus = AsyncMock()
-    bus.subscribe_outbound = AsyncMock()
     bus.publish_inbound = AsyncMock()
+    bus.subscribe_outbound = AsyncMock()
     return bus
 
 
 @pytest.fixture
-def handler(mock_message_bus):
+def handler(mock_bus):
     """A fresh TelegramChannelHandler wired to a mock bus."""
-    return TelegramChannelHandler(
-        token="TEST_TOKEN_123",
-        message_bus=mock_message_bus,
-    )
+    return TelegramChannelHandler(bus=mock_bus, token="TEST_TOKEN_123")
 
 
 # ---------------------------------------------------------------------------
 # Helpers to build Telegram-like objects
 # ---------------------------------------------------------------------------
+
 
 def _make_telegram_update(text="hello", chat_id=42, user_id=7, message_id=1):
     """Create a minimal mock that looks like ``telegram.Update``."""
@@ -69,13 +72,13 @@ def _make_telegram_update(text="hello", chat_id=42, user_id=7, message_id=1):
 # Tests
 # ---------------------------------------------------------------------------
 
+
 class TestConnect:
     """Verify the connect lifecycle."""
 
     @pytest.mark.asyncio
     @patch("merobot.handler.channels.telegram.Application")
     async def test_connect_starts_polling(self, MockApplication, handler):
-        # Arrange — make the builder chain return async mocks
         app_instance = AsyncMock()
         app_instance.bot = AsyncMock()
         app_instance.updater = AsyncMock()
@@ -86,19 +89,18 @@ class TestConnect:
         builder.build.return_value = app_instance
         MockApplication.builder.return_value = builder
 
-        # Act
         await handler.connect()
 
-        # Assert
         builder.token.assert_called_once_with("TEST_TOKEN_123")
         app_instance.initialize.assert_awaited_once()
         app_instance.start.assert_awaited_once()
         app_instance.updater.start_polling.assert_awaited_once()
         assert handler._connected is True
+        assert handler.is_running is True
 
     @pytest.mark.asyncio
     @patch("merobot.handler.channels.telegram.Application")
-    async def test_connect_subscribes_outbound(self, MockApplication, handler, mock_message_bus):
+    async def test_double_connect_is_noop(self, MockApplication, handler):
         app_instance = AsyncMock()
         app_instance.bot = AsyncMock()
         app_instance.updater = AsyncMock()
@@ -110,17 +112,15 @@ class TestConnect:
         MockApplication.builder.return_value = builder
 
         await handler.connect()
+        await handler.connect()  # should be a no-op
 
-        mock_message_bus.subscribe_outbound.assert_awaited_once()
-        args = mock_message_bus.subscribe_outbound.call_args
-        assert args[0][0] == "telegram"
+        builder.build.assert_called_once()
 
 
 class TestDisconnect:
     @pytest.mark.asyncio
     @patch("merobot.handler.channels.telegram.Application")
     async def test_disconnect_stops_app(self, MockApplication, handler):
-        # Connect first
         app_instance = AsyncMock()
         app_instance.bot = AsyncMock()
         app_instance.updater = AsyncMock()
@@ -133,14 +133,17 @@ class TestDisconnect:
         MockApplication.builder.return_value = builder
 
         await handler.connect()
-
-        # Disconnect
         await handler.disconnect()
 
         app_instance.updater.stop.assert_awaited_once()
         app_instance.stop.assert_awaited_once()
         app_instance.shutdown.assert_awaited_once()
         assert handler._connected is False
+        assert handler.is_running is False
+
+    @pytest.mark.asyncio
+    async def test_disconnect_when_not_connected_is_noop(self, handler):
+        await handler.disconnect()
 
 
 class TestSendMessage:
@@ -175,18 +178,18 @@ class TestSendMessage:
             await handler.send_message(outbound)
 
 
-class TestReceiveMessage:
+class TestInboundPublishing:
+    """Verify _handle_update publishes to bus via _publish_inbound."""
+
     @pytest.mark.asyncio
-    async def test_receive_returns_inbound(self, handler, mock_message_bus):
+    async def test_handle_update_publishes_to_bus(self, handler, mock_bus):
         update = _make_telegram_update(text="hi bot", chat_id=42, user_id=7)
         context = MagicMock()
 
-        # Simulate incoming update
         await handler._handle_update(update, context)
 
-        inbound = await asyncio.wait_for(handler.receive_message(), timeout=2.0)
-
-        assert isinstance(inbound, InboundMessage)
+        mock_bus.publish_inbound.assert_awaited_once()
+        inbound = mock_bus.publish_inbound.call_args[0][0]
         assert inbound.channel == "telegram"
         assert inbound.content == "hi bot"
         assert inbound.sender_id == "7"
@@ -194,15 +197,25 @@ class TestReceiveMessage:
         assert inbound.metadata["username"] == "testuser"
 
     @pytest.mark.asyncio
-    async def test_handle_update_publishes_to_bus(self, handler, mock_message_bus):
-        update = _make_telegram_update(text="hello bus")
+    async def test_handle_update_ignores_none_message(self, handler, mock_bus):
+        update = MagicMock()
+        update.message = None
         context = MagicMock()
 
         await handler._handle_update(update, context)
 
-        mock_message_bus.publish_inbound.assert_awaited_once()
-        published_msg = mock_message_bus.publish_inbound.call_args[0][0]
-        assert published_msg.content == "hello bus"
+        mock_bus.publish_inbound.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_handle_update_ignores_none_text(self, handler, mock_bus):
+        update = MagicMock()
+        update.message = MagicMock()
+        update.message.text = None
+        context = MagicMock()
+
+        await handler._handle_update(update, context)
+
+        mock_bus.publish_inbound.assert_not_awaited()
 
 
 class TestTyping:
@@ -219,7 +232,6 @@ class TestTyping:
 
     @pytest.mark.asyncio
     async def test_stop_typing_is_noop(self, handler):
-        # Should not raise and should not call any API
         await handler.stop_typing("42")
 
     @pytest.mark.asyncio
@@ -233,7 +245,7 @@ class TestMediaExtraction:
         msg = MagicMock()
         photo_large = MagicMock()
         photo_large.file_id = "photo_123"
-        msg.photo = [MagicMock(), photo_large]  # last = largest
+        msg.photo = [MagicMock(), photo_large]
         msg.document = None
         msg.video = None
         msg.audio = None

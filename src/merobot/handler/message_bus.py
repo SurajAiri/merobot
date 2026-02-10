@@ -4,12 +4,11 @@ from collections.abc import Awaitable, Callable
 
 from loguru import logger
 
-from .channels.base import BaseChannelHandler  # noqa: F401
 from .messages import InboundMessage, OutboundMessage
 
 
 class MessageBus:
-    def __init__(self, config: dict):
+    def __init__(self, config: dict | None = None):
         self.inbound: Queue[InboundMessage] = Queue()
         self.outbound: Queue[OutboundMessage] = Queue()
         self._outbound_subscribers: dict[

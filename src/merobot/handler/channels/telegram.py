@@ -1,6 +1,5 @@
-"""Telegram channel handler — bridges Telegram Bot API ↔ MessageBus."""
+"""Telegram channel handler — connects to Telegram Bot API and publishes to bus."""
 
-import asyncio
 import time
 
 from loguru import logger
@@ -13,29 +12,35 @@ from telegram.ext import (
     filters,
 )
 
-from merobot.handler.messages import InboundMessage, OutboundMessage
+from merobot.handler.message_bus import MessageBus
+from merobot.handler.messages import OutboundMessage
 
 from .base import BaseChannelHandler
 
 
 class TelegramChannelHandler(BaseChannelHandler):
-    """Concrete channel handler that connects to Telegram via polling."""
+    """Telegram channel handler using polling.
 
+    Responsibilities:
+        - Connect / disconnect to Telegram (polling mode)
+        - Send an OutboundMessage via Bot API
+        - Receive incoming messages, convert to InboundMessage, and publish to bus
+    """
+
+    name = "telegram"
     CHANNEL_NAME = "telegram"
 
-    def __init__(self, token: str, message_bus=None):
+    def __init__(self, bus: MessageBus, token: str, config: dict | None = None):
         """
         Args:
+            bus: MessageBus instance for publishing inbound messages.
             token: Telegram Bot API token from @BotFather.
-            message_bus: Optional MessageBus instance. When provided the
-                handler will publish inbound messages to the bus and
-                subscribe for outbound messages automatically.
+            config: Optional channel-specific config dict.
         """
+        super().__init__(bus, config)
         self._token = token
-        self._message_bus = message_bus
         self._app: Application | None = None
         self._bot: Bot | None = None
-        self._inbound_queue: asyncio.Queue[InboundMessage] = asyncio.Queue()
         self._connected = False
 
     # ------------------------------------------------------------------
@@ -56,17 +61,11 @@ class TelegramChannelHandler(BaseChannelHandler):
         # Register a handler for all text (& caption) messages
         self._app.add_handler(
             MessageHandler(
-                filters.TEXT & ~filters.COMMAND,
+                filters.TEXT
+                & ~filters.COMMAND,  # todo: support all media types (image, text, audio, voice and documents)
                 self._handle_update,
             )
         )
-
-        # Subscribe to outbound messages on the bus so replies flow back
-        if self._message_bus is not None:
-            await self._message_bus.subscribe_outbound(
-                self.CHANNEL_NAME,
-                self._on_outbound,
-            )
 
         # Initialize and start polling (non-blocking)
         await self._app.initialize()
@@ -74,6 +73,7 @@ class TelegramChannelHandler(BaseChannelHandler):
         await self._app.updater.start_polling(drop_pending_updates=True)
 
         self._connected = True
+        self._running = True
         logger.info("Telegram channel connected (polling)")
 
     async def disconnect(self):
@@ -90,6 +90,7 @@ class TelegramChannelHandler(BaseChannelHandler):
             logger.error(f"Error during Telegram disconnect: {exc}")
         finally:
             self._connected = False
+            self._running = False
             logger.info("Telegram channel disconnected")
 
     async def send_message(self, message: OutboundMessage):
@@ -102,10 +103,6 @@ class TelegramChannelHandler(BaseChannelHandler):
             text=message.content,
         )
         logger.debug(f"Sent message to chat {message.chat_id}")
-
-    async def receive_message(self) -> InboundMessage:
-        """Block until the next inbound message arrives and return it."""
-        return await self._inbound_queue.get()
 
     async def start_typing(self, chat_id: str):
         """Send a 'typing…' indicator to the given chat."""
@@ -126,13 +123,14 @@ class TelegramChannelHandler(BaseChannelHandler):
     # ------------------------------------------------------------------
 
     async def _handle_update(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Convert an incoming Telegram Update into an InboundMessage."""
+        """Convert an incoming Telegram Update into an InboundMessage and publish to bus."""
         if update.message is None or update.message.text is None:
             return
 
         msg = update.message
 
-        inbound = InboundMessage(
+        # Use the base class helper to create InboundMessage and publish to bus
+        await self._publish_inbound(
             channel=self.CHANNEL_NAME,
             content=msg.text,
             sender_id=str(msg.from_user.id) if msg.from_user else "unknown",
@@ -147,20 +145,11 @@ class TelegramChannelHandler(BaseChannelHandler):
             },
         )
 
-        # Enqueue for receive_message()
-        await self._inbound_queue.put(inbound)
-
-        # Publish to bus if available
-        if self._message_bus is not None:
-            await self._message_bus.publish_inbound(inbound)
-
         logger.debug(
-            f"Received message from {inbound.sender_id} in chat {inbound.chat_id}"
+            f"Received message from "
+            f"{msg.from_user.id if msg.from_user else 'unknown'} "
+            f"in chat {msg.chat_id}"
         )
-
-    async def _on_outbound(self, message: OutboundMessage):
-        """Callback registered on the MessageBus for outbound dispatch."""
-        await self.send_message(message)
 
     @staticmethod
     def _extract_media(msg) -> list[str]:

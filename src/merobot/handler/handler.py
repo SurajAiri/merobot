@@ -1,36 +1,130 @@
 # roles: connection with channels, message transport, session with message history management. # noqa:E501
-from merobot.handler.channels.telegram import TelegramChannelHandler
-from merobot.handler.message_bus import MessageBus
+
+import asyncio
 import os
 
+from loguru import logger
+
+from merobot.handler.channels.base import BaseChannelHandler
+from merobot.handler.channels.telegram import TelegramChannelHandler
+from merobot.handler.message_bus import MessageBus
+
+
 class CommunicationHandler:
+    """Singleton orchestrator that owns channels, the MessageBus, and sessions.
+
+    Responsibilities:
+        1. **Channel connections** — instantiate and connect/disconnect channels.
+        2. **Message transport** — owns the MessageBus and passes it to channels
+           so they can publish inbound messages directly. Subscribes each
+           channel's send_message for outbound dispatch.
+        3. **Session management** — maintain per-chat session state (TBD).
+    """
+
+    _instance: "CommunicationHandler | None" = None
+
+    # ------------------------------------------------------------------
+    # Singleton
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def get_instance(cls, config: dict | None = None) -> "CommunicationHandler":
+        """Return the singleton CommunicationHandler, creating it on first call.
+
+        Args:
+            config: Required on the very first call, ignored afterwards.
+        """
+        if cls._instance is None:
+            if config is None:
+                raise RuntimeError(
+                    "CommunicationHandler.get_instance() requires `config` "
+                    "on the first call."
+                )
+            cls._instance = cls(config)
+        return cls._instance
+
+    @classmethod
+    def reset(cls):
+        """Reset the singleton (useful for testing)."""
+        cls._instance = None
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
     def __init__(self, config: dict):
         self.config = config
         self.message_bus = MessageBus()
-        self.channels = []
-        self.sessions = {}
+        self.channels: dict[str, BaseChannelHandler] = {}
+        self.sessions: dict[str, dict] = {}
+        self._dispatch_task: asyncio.Task | None = None
 
-        self._register_valid_channels()
+        self._register_channels()
 
-    def _register_valid_channels(self):
-        for channel in self.config["channels"]:
-            if not channel['enabled']:
+    def _register_channels(self):
+        """Parse config['channels'] and instantiate channel handlers.
+
+        Each channel receives the shared MessageBus so it can publish
+        inbound messages directly via ``_publish_inbound()``.
+        """
+        channels_cfg = self.config.get("channels", {})
+
+        for name, channel_cfg in channels_cfg.items():
+            if not channel_cfg.get("enabled", False):
                 continue
-            
-            channel_type = channel['type']
-            token = os.getenv(channel['env_token'])
-            if channel_type == 'telegram':
-                self.channels.append(TelegramChannelHandler(token, self.message_bus))
-                self.message_bus.subscribe_outbound(channel_type, self.channels[-1].send_message)   
-            # elif channel_type == 'whatsapp':
-            #     self.channels.append(WhatsappChannelHandler(channel['token'], self.message_bus))
+
+            channel_type = channel_cfg.get("type", name)
+
+            if channel_type == "telegram":
+                token = os.getenv(channel_cfg["env_token"], "")
+                if not token or token == "":
+                    logger.warning(
+                        f"Telegram token not found in env var "
+                        f"{channel_cfg['env_token']}. Skipping Telegram channel."
+                    )
+                    continue
+                handler = TelegramChannelHandler(
+                    bus=self.message_bus,
+                    token=token,
+                    config=channel_cfg,
+                )
+                self.channels[name] = handler
+                logger.info(f"Registered channel: {name} (type={channel_type})")
             else:
                 logger.warning(f"Unknown channel type: {channel_type}")
 
     async def start(self):
-        for channel in self.channels:
+        """Connect all channels and start outbound dispatch."""
+        # Connect every registered channel
+        for name, channel in self.channels.items():
             await channel.connect()
+            logger.info(f"Channel '{name}' connected")
+
+            # Subscribe channel.send_message as outbound handler on the bus
+            await self.message_bus.subscribe_outbound(
+                name,
+                channel.send_message,
+            )
+
+        # Start the bus outbound dispatcher
+        self._dispatch_task = asyncio.create_task(
+            self.message_bus.dispatch_outbound(),
+            name="bus-outbound-dispatch",
+        )
+
+        logger.info("CommunicationHandler started")
 
     async def stop(self):
-        for channel in self.channels:
+        """Disconnect channels, cancel background tasks, stop bus."""
+        # Stop the bus first so no new outbound messages are dispatched
+        self.message_bus.stop()
+        if self._dispatch_task is not None:
+            self._dispatch_task.cancel()
+            self._dispatch_task = None
+
+        # Disconnect channels
+        for name, channel in self.channels.items():
             await channel.disconnect()
+            logger.info(f"Channel '{name}' disconnected")
+
+        logger.info("CommunicationHandler stopped")
