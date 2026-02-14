@@ -1,6 +1,18 @@
 """Agent tools package."""
 
 from merobot.tools.base import BaseTool
+from merobot.tools.date_time import DateTimeTool
+from merobot.tools.file_ops import FileReadTool, FileWriteTool
+from merobot.tools.weather import WeatherTool
+from merobot.tools.web_scrape import WebScrapeTool
 from merobot.tools.web_search import WebSearchTool
 
-__all__ = ["BaseTool", "WebSearchTool"]
+__all__ = [
+    "BaseTool",
+    "DateTimeTool",
+    "FileReadTool",
+    "FileWriteTool",
+    "WeatherTool",
+    "WebScrapeTool",
+    "WebSearchTool",
+]
