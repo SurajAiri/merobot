@@ -7,27 +7,20 @@ import httpx
 from bs4 import BeautifulSoup
 from loguru import logger
 
+from merobot.constants import (
+    DEFAULT_USER_AGENT,
+    SCRAPE_ABSOLUTE_MAX_LENGTH,
+    SCRAPE_DEFAULT_MAX_LENGTH,
+    SCRAPE_STRIP_TAGS,
+    SCRAPE_TIMEOUT,
+)
 from merobot.tools.base import BaseTool
 
 _HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    ),
+    "User-Agent": DEFAULT_USER_AGENT,
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
 }
-_TIMEOUT = 20.0
-_MAX_RESPONSE_BYTES = 5 * 1024 * 1024  # 5 MB max download
-_DEFAULT_MAX_LENGTH = 5000
-_ABSOLUTE_MAX_LENGTH = 20000
-
-# Tags to remove before extracting text
-_STRIP_TAGS = [
-    "script", "style", "noscript", "iframe", "svg",
-    "nav", "footer", "header", "aside", "form",
-]
 
 
 class WebScrapeTool(BaseTool):
@@ -62,11 +55,11 @@ class WebScrapeTool(BaseTool):
                     "type": "integer",
                     "description": (
                         "Maximum characters of text to return. "
-                        f"Default: {_DEFAULT_MAX_LENGTH}, max: {_ABSOLUTE_MAX_LENGTH}."
+                        f"Default: {SCRAPE_DEFAULT_MAX_LENGTH}, max: {SCRAPE_ABSOLUTE_MAX_LENGTH}."
                     ),
                     "minimum": 100,
-                    "maximum": _ABSOLUTE_MAX_LENGTH,
-                    "default": _DEFAULT_MAX_LENGTH,
+                    "maximum": SCRAPE_ABSOLUTE_MAX_LENGTH,
+                    "default": SCRAPE_DEFAULT_MAX_LENGTH,
                 },
                 "selector": {
                     "type": "string",
@@ -82,13 +75,12 @@ class WebScrapeTool(BaseTool):
 
     async def execute(self, **kwargs: Any) -> str:
         url: str = kwargs.get("url", "").strip()
-        max_length: int = kwargs.get("max_length", _DEFAULT_MAX_LENGTH)
+        max_length: int = kwargs.get("max_length", SCRAPE_DEFAULT_MAX_LENGTH)
         selector: str | None = kwargs.get("selector")
 
         if not url:
             return "Error: 'url' parameter is required."
 
-        # Basic URL validation
         parsed = urlparse(url)
         if parsed.scheme not in ("http", "https"):
             if not parsed.scheme:
@@ -96,7 +88,7 @@ class WebScrapeTool(BaseTool):
             else:
                 return f"Error: Unsupported URL scheme '{parsed.scheme}'. Use http or https."
 
-        max_length = max(100, min(_ABSOLUTE_MAX_LENGTH, max_length))
+        max_length = max(100, min(SCRAPE_ABSOLUTE_MAX_LENGTH, max_length))
 
         logger.info(f"Web scrape: {url!r} (max_length={max_length}, selector={selector!r})")
 
@@ -118,7 +110,7 @@ class WebScrapeTool(BaseTool):
         """Fetch HTML content from URL."""
         async with httpx.AsyncClient(
             headers=_HEADERS,
-            timeout=_TIMEOUT,
+            timeout=SCRAPE_TIMEOUT,
             follow_redirects=True,
             max_redirects=5,
             verify=False,
@@ -126,7 +118,6 @@ class WebScrapeTool(BaseTool):
             response = await client.get(url)
             response.raise_for_status()
 
-            # Check content type
             content_type = response.headers.get("content-type", "")
             if "text/html" not in content_type and "text/plain" not in content_type:
                 raise ValueError(f"Unsupported content type: {content_type}")
@@ -139,19 +130,16 @@ class WebScrapeTool(BaseTool):
         """Parse HTML and extract readable text."""
         soup = BeautifulSoup(html, "html.parser")
 
-        # Extract metadata
         title = soup.title.get_text(strip=True) if soup.title else ""
         meta_desc = ""
         meta_tag = soup.find("meta", attrs={"name": "description"})
         if meta_tag and meta_tag.get("content"):
             meta_desc = meta_tag["content"].strip()
 
-        # Strip non-content tags
-        for tag_name in _STRIP_TAGS:
+        for tag_name in SCRAPE_STRIP_TAGS:
             for tag in soup.find_all(tag_name):
                 tag.decompose()
 
-        # Try CSS selector if provided
         content_text = ""
         if selector:
             selected = soup.select(selector)
@@ -160,24 +148,20 @@ class WebScrapeTool(BaseTool):
                     el.get_text(separator="\n", strip=True) for el in selected
                 )
 
-        # Fallback to body or full page
         if not content_text:
             body = soup.find("body")
             target = body if body else soup
             content_text = target.get_text(separator="\n", strip=True)
 
-        # Clean up excessive whitespace
         lines = [line.strip() for line in content_text.splitlines()]
-        lines = [line for line in lines if line]  # remove blank lines
+        lines = [line for line in lines if line]
         content_text = "\n".join(lines)
 
-        # Truncate
         truncated = False
         if len(content_text) > max_length:
             content_text = content_text[:max_length]
             truncated = True
 
-        # Build response
         parts = [f"## Scraped: {title or url}\n"]
         if title:
             parts.append(f"**Title**: {title}")

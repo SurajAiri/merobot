@@ -5,11 +5,10 @@ from typing import Any
 import httpx
 from loguru import logger
 
+from merobot.constants import WEATHER_TIMEOUT, WEATHER_URL
 from merobot.tools.base import BaseTool
 
-_WTTR_URL = "https://wttr.in"
 _HEADERS = {"User-Agent": "merobot/0.1"}
-_TIMEOUT = 10.0
 
 
 class WeatherTool(BaseTool):
@@ -75,17 +74,17 @@ class WeatherTool(BaseTool):
         """Fetch weather JSON from wttr.in."""
         params = {"format": "j1"}
         if units == "imperial":
-            params["u"] = ""  # use USCS units
+            params["u"] = ""
         else:
-            params["m"] = ""  # use metric units
+            params["m"] = ""
 
         async with httpx.AsyncClient(
             headers=_HEADERS,
-            timeout=_TIMEOUT,
+            timeout=WEATHER_TIMEOUT,
             follow_redirects=True,
         ) as client:
             response = await client.get(
-                f"{_WTTR_URL}/{location}",
+                f"{WEATHER_URL}/{location}",
                 params=params,
             )
             response.raise_for_status()
@@ -99,13 +98,11 @@ class WeatherTool(BaseTool):
             current = data["current_condition"][0]
             area = data.get("nearest_area", [{}])[0]
 
-            # Location info
             area_name = area.get("areaName", [{}])[0].get("value", location)
             country = area.get("country", [{}])[0].get("value", "")
             region = area.get("region", [{}])[0].get("value", "")
             loc_str = ", ".join(filter(None, [area_name, region, country]))
 
-            # Current conditions
             temp_key = "temp_C" if units == "metric" else "temp_F"
             feels_key = "FeelsLikeC" if units == "metric" else "FeelsLikeF"
             temp_unit = "°C" if units == "metric" else "°F"
@@ -128,7 +125,6 @@ class WeatherTool(BaseTool):
                 "",
             ]
 
-            # 3-day forecast
             forecast = data.get("weather", [])
             if forecast:
                 lines.append("### 3-Day Forecast")

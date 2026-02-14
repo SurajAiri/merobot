@@ -3,22 +3,15 @@
 import re
 from html import unescape
 from typing import Any
-from urllib.parse import quote_plus
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 from loguru import logger
 
+from merobot.constants import DEFAULT_USER_AGENT, SEARCH_DDG_URL, SEARCH_TIMEOUT
 from merobot.tools.base import BaseTool
 
-_DDG_URL = "https://html.duckduckgo.com/html/"
-_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    ),
-}
-_TIMEOUT = 15.0
+_HEADERS = {"User-Agent": DEFAULT_USER_AGENT}
 
 # Regex patterns to extract results from DDG HTML
 _RESULT_BLOCK = re.compile(
@@ -40,7 +33,6 @@ def _strip_html(text: str) -> str:
 class WebSearchTool(BaseTool):
     """
     Search the web using DuckDuckGo.
-
     Returns formatted results with title, URL, and snippet.
     No API key required.
     """
@@ -80,17 +72,6 @@ class WebSearchTool(BaseTool):
         }
 
     async def execute(self, **kwargs: Any) -> str:
-        """
-        Execute a web search and return formatted results.
-
-        Args:
-            query: The search query string.
-            max_results: Max results to return (1-10, default 5).
-
-        Returns:
-            Formatted markdown string with search results,
-            or an error message string on failure.
-        """
         query: str = kwargs.get("query", "").strip()
         max_results: int = kwargs.get("max_results", 5)
 
@@ -124,11 +105,11 @@ class WebSearchTool(BaseTool):
         """Fetch search results from DuckDuckGo HTML endpoint."""
         async with httpx.AsyncClient(
             headers=_HEADERS,
-            timeout=_TIMEOUT,
+            timeout=SEARCH_TIMEOUT,
             follow_redirects=True,
         ) as client:
             response = await client.post(
-                _DDG_URL,
+                SEARCH_DDG_URL,
                 data={"q": query, "b": ""},
             )
             response.raise_for_status()
@@ -144,8 +125,6 @@ class WebSearchTool(BaseTool):
 
             # DDG wraps URLs in a redirect — extract the actual URL
             if "uddg=" in url:
-                from urllib.parse import parse_qs, urlparse
-
                 parsed = urlparse(url)
                 qs = parse_qs(parsed.query)
                 url = qs.get("uddg", [url])[0]
@@ -168,6 +147,6 @@ class WebSearchTool(BaseTool):
             lines.append(f"**URL**: {r['url']}")
             if r["snippet"]:
                 lines.append(f"{r['snippet']}")
-            lines.append("")  # blank line between results
+            lines.append("")
 
         return "\n".join(lines)

@@ -1,10 +1,10 @@
 # roles: connection with channels, message transport, session with message history management. # noqa:E501
 
 import asyncio
-import os
 
 from loguru import logger
 
+from merobot.config import get_config
 from merobot.handler.channels.base import BaseChannelHandler
 from merobot.handler.channels.telegram import TelegramChannelHandler
 from merobot.handler.message_bus import MessageBus
@@ -28,19 +28,10 @@ class CommunicationHandler:
     # ------------------------------------------------------------------
 
     @classmethod
-    def get_instance(cls, config: dict | None = None) -> "CommunicationHandler":
-        """Return the singleton CommunicationHandler, creating it on first call.
-
-        Args:
-            config: Required on the very first call, ignored afterwards.
-        """
+    def get_instance(cls) -> "CommunicationHandler":
+        """Return the singleton CommunicationHandler, creating it on first call."""
         if cls._instance is None:
-            if config is None:
-                raise RuntimeError(
-                    "CommunicationHandler.get_instance() requires `config` "
-                    "on the first call."
-                )
-            cls._instance = cls(config)
+            cls._instance = cls()
         return cls._instance
 
     @classmethod
@@ -52,8 +43,8 @@ class CommunicationHandler:
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def __init__(self, config: dict):
-        self.config = config
+    def __init__(self):
+        self._config = get_config()
         self.message_bus = MessageBus()
         self.channels: dict[str, BaseChannelHandler] = {}
         self.sessions: dict[str, dict] = {}
@@ -62,51 +53,40 @@ class CommunicationHandler:
         self._register_channels()
 
     def _register_channels(self):
-        """Parse config['channels'] and instantiate channel handlers.
+        """Parse enabled channels from config and instantiate handlers.
 
         Each channel receives the shared MessageBus so it can publish
         inbound messages directly via ``_publish_inbound()``.
         """
-        channels_cfg = self.config.get("channels", {})
-
-        for name, channel_cfg in channels_cfg.items():
-            if not channel_cfg.get("enabled", False):
-                continue
-
-            channel_type = channel_cfg.get("type", name)
-
-            if channel_type == "telegram":
-                token = os.getenv(channel_cfg["env_token"], "")
-                if not token or token == "":
+        for name, channel_cfg in self._config.get_enabled_channels().items():
+            if channel_cfg.type == "telegram":
+                if not channel_cfg.token:
                     logger.warning(
-                        f"Telegram token not found in env var "
-                        f"{channel_cfg['env_token']}. Skipping Telegram channel."
+                        f"Telegram token not resolved for channel '{name}'. "
+                        f"Check your .env file. Skipping."
                     )
                     continue
                 handler = TelegramChannelHandler(
                     bus=self.message_bus,
-                    token=token,
-                    config=channel_cfg,
+                    token=channel_cfg.token,
+                    config=channel_cfg.extra,
                 )
                 self.channels[name] = handler
-                logger.info(f"Registered channel: {name} (type={channel_type})")
+                logger.info(f"Registered channel: {name} (type={channel_cfg.type})")
             else:
-                logger.warning(f"Unknown channel type: {channel_type}")
+                logger.warning(f"Unknown channel type: {channel_cfg.type}")
 
     async def start(self):
         """Connect all channels and start outbound dispatch."""
-        # Connect every registered channel
         for name, channel in self.channels.items():
             await channel.connect()
             logger.info(f"Channel '{name}' connected")
 
-            # Subscribe channel.send_message as outbound handler on the bus
             await self.message_bus.subscribe_outbound(
                 name,
                 channel.send_message,
             )
 
-        # Start the bus outbound dispatcher
         self._dispatch_task = asyncio.create_task(
             self.message_bus.dispatch_outbound(),
             name="bus-outbound-dispatch",
@@ -116,13 +96,11 @@ class CommunicationHandler:
 
     async def stop(self):
         """Disconnect channels, cancel background tasks, stop bus."""
-        # Stop the bus first so no new outbound messages are dispatched
         self.message_bus.stop()
         if self._dispatch_task is not None:
             self._dispatch_task.cancel()
             self._dispatch_task = None
 
-        # Disconnect channels
         for name, channel in self.channels.items():
             await channel.disconnect()
             logger.info(f"Channel '{name}' disconnected")
