@@ -3,7 +3,7 @@
         "workspace_path": "~/.merobot/workspace",
         "default": {
             "provider": "groq",
-            "model": "groq/moonshotai/kimi-k2-instruct-0905",
+            "model": "groq/qwen/qwen3-32b",
             "temperature": 0.7,
             "max_tokens": 2048
         }

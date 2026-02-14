@@ -1,2 +1,7 @@
+from merobot.app import Application
+
+
 def main():
-    print("Hello from merobot!")
+    """Launch the MeroBot application."""
+    app = Application()
+    app.run()

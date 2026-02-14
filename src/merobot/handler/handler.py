@@ -28,10 +28,12 @@ class CommunicationHandler:
     # ------------------------------------------------------------------
 
     @classmethod
-    def get_instance(cls) -> "CommunicationHandler":
+    def get_instance(
+        cls, message_bus: MessageBus | None = None
+    ) -> "CommunicationHandler":
         """Return the singleton CommunicationHandler, creating it on first call."""
         if cls._instance is None:
-            cls._instance = cls()
+            cls._instance = cls(message_bus=message_bus)
         return cls._instance
 
     @classmethod
@@ -43,9 +45,9 @@ class CommunicationHandler:
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def __init__(self):
+    def __init__(self, message_bus: MessageBus | None = None):
         self._config = get_config()
-        self.message_bus = MessageBus()
+        self.message_bus = message_bus or MessageBus()
         self.channels: dict[str, BaseChannelHandler] = {}
         self.sessions: dict[str, dict] = {}
         self._dispatch_task: asyncio.Task | None = None
