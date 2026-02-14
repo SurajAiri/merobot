@@ -9,6 +9,7 @@ expects, and handles streaming / error paths.
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import litellm
 from loguru import logger
@@ -16,9 +17,7 @@ from loguru import logger
 from .base import (
     BaseLLMProvider,
     LLMResponse,
-    Message,
-    ToolCall,
-    ToolDefinition,
+    ToolCallRequests,
 )
 
 
@@ -29,7 +28,6 @@ class LiteLLMProvider(BaseLLMProvider):
 
     def __init__(
         self,
-        *,
         api_key: str | None = None,
         api_base: str | None = None,
         default_headers: dict[str, str] | None = None,
@@ -48,12 +46,11 @@ class LiteLLMProvider(BaseLLMProvider):
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-
     async def generate_response(
         self,
         model: str,
-        messages: list[Message],
-        tools: list[ToolDefinition] | None = None,
+        messages: list[dict],
+        tools: list[Any] | None = None,
         max_tokens: int = 4096,
         temperature: float = 0.7,
     ) -> LLMResponse:
@@ -67,18 +64,15 @@ class LiteLLMProvider(BaseLLMProvider):
            messages with the results, and call ``generate_response`` again.
         3. Repeat until the model replies with pure text (no tool calls).
         """
-        litellm_messages = self._build_messages(messages)
-        litellm_tools = self._build_tools(tools) if tools else None
-
         kwargs: dict = {
             "model": model,
-            "messages": litellm_messages,
+            "messages": messages,
             "max_tokens": max_tokens,
             "temperature": temperature,
         }
 
-        if litellm_tools:
-            kwargs["tools"] = litellm_tools
+        if tools is not None:
+            kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
 
         if self._api_key:
@@ -91,8 +85,8 @@ class LiteLLMProvider(BaseLLMProvider):
         logger.debug(
             "LiteLLM request | model={} msgs={} tools={}",
             model,
-            len(litellm_messages),
-            len(litellm_tools) if litellm_tools else 0,
+            len(messages),
+            len(tools) if tools else 0,
         )
 
         try:
@@ -114,59 +108,6 @@ class LiteLLMProvider(BaseLLMProvider):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _build_messages(messages: list[Message]) -> list[dict]:
-        """Convert ``Message`` dataclasses → OpenAI-style message dicts."""
-        out: list[dict] = []
-        for msg in messages:
-            entry: dict = {"role": msg.role}
-
-            if msg.content is not None:
-                entry["content"] = msg.content
-
-            # Assistant message that contains tool calls
-            if msg.role == "assistant" and msg.tool_calls:
-                entry["tool_calls"] = [
-                    {
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {
-                            "name": tc.name,
-                            "arguments": json.dumps(tc.arguments),
-                        },
-                    }
-                    for tc in msg.tool_calls
-                ]
-                # OpenAI requires content key even if None
-                entry.setdefault("content", None)
-
-            # Tool-result message
-            if msg.role == "tool":
-                entry["tool_call_id"] = msg.tool_call_id
-                if msg.name:
-                    entry["name"] = msg.name
-                # Content must be a string for tool messages
-                if entry.get("content") is None:
-                    entry["content"] = ""
-
-            out.append(entry)
-        return out
-
-    @staticmethod
-    def _build_tools(tools: list[ToolDefinition]) -> list[dict]:
-        """Convert ``ToolDefinition`` dataclasses → OpenAI function tool dicts."""
-        return [
-            {
-                "type": "function",
-                "function": {
-                    "name": tool.name,
-                    "description": tool.description,
-                    "parameters": tool.parameters,
-                },
-            }
-            for tool in tools
-        ]
-
-    @staticmethod
     def _parse_response(response) -> LLMResponse:
         """Convert a LiteLLM ``ModelResponse`` → ``LLMResponse``."""
         if not response.choices:
@@ -179,7 +120,7 @@ class LiteLLMProvider(BaseLLMProvider):
         content = getattr(assistant_msg, "content", None)
 
         # --- Tool calls ---
-        tool_calls: list[ToolCall] = []
+        tool_calls: list[ToolCallRequests] = []
         raw_tool_calls = getattr(assistant_msg, "tool_calls", None)
         if raw_tool_calls:
             for tc in raw_tool_calls:
@@ -195,7 +136,7 @@ class LiteLLMProvider(BaseLLMProvider):
                     arguments = {}
 
                 tool_calls.append(
-                    ToolCall(
+                    ToolCallRequests(
                         id=tc.id,
                         name=tc.function.name,
                         arguments=arguments,

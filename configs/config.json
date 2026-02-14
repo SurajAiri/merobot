@@ -2,8 +2,8 @@
     "agent": {
         "workspace_path": "~/.merobot/workspace",
         "default": {
-            "provider": "openai",
-            "model": "gpt-3.5-turbo",
+            "provider": "groq",
+            "model": "groq/moonshotai/kimi-k2-instruct-0905",
             "temperature": 0.7,
             "max_tokens": 2048
         }
