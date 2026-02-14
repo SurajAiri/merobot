@@ -186,7 +186,7 @@ class TestInboundPublishing:
         update = _make_telegram_update(text="hi bot", chat_id=42, user_id=7)
         context = MagicMock()
 
-        await handler._handle_update(update, context)
+        await handler._handle_text(update, context)
 
         mock_bus.publish_inbound.assert_awaited_once()
         inbound = mock_bus.publish_inbound.call_args[0][0]
@@ -202,7 +202,7 @@ class TestInboundPublishing:
         update.message = None
         context = MagicMock()
 
-        await handler._handle_update(update, context)
+        await handler._handle_text(update, context)
 
         mock_bus.publish_inbound.assert_not_awaited()
 
@@ -213,7 +213,7 @@ class TestInboundPublishing:
         update.message.text = None
         context = MagicMock()
 
-        await handler._handle_update(update, context)
+        await handler._handle_text(update, context)
 
         mock_bus.publish_inbound.assert_not_awaited()
 

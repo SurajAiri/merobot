@@ -22,9 +22,12 @@ from merobot.handler.messages import InboundMessage, OutboundMessage
 from merobot.handler.session.session import SessionManager
 from merobot.providers.llm import LiteLLMProvider
 from merobot.tools import (
+    CodeExecutorTool,
     DateTimeTool,
     FileReadTool,
     FileWriteTool,
+    SQLiteQueryTool,
+    SubAgentTool,
     WebScrapeTool,
     WebSearchTool,
 )
@@ -62,6 +65,17 @@ class AgentLoop:
         self.tool_registry.register(FileWriteTool())
         self.tool_registry.register(WebScrapeTool())
         self.tool_registry.register(WebSearchTool())
+        self.tool_registry.register(CodeExecutorTool())
+        self.tool_registry.register(SQLiteQueryTool())
+        self.tool_registry.register(
+            SubAgentTool(
+                llm=self.llm,
+                tool_registry=self.tool_registry,
+                model=self.model_config.model,
+                max_tokens=self.model_config.max_tokens,
+                temperature=self.model_config.temperature,
+            )
+        )
 
     async def run(self) -> None:
         """Main loop — runs forever as an asyncio task.
@@ -93,10 +107,26 @@ class AgentLoop:
     async def _process_message(self, msg: InboundMessage) -> str:
         """Run the LLM with tool loop and return the final text response."""
 
-        # 1. Record user message in session
-        self.session.add_message(msg.chat_id, "user", msg.content)
+        # Handle /clear command
+        if msg.metadata.get("command") == "clear":
+            self.session.clear(msg.chat_id)
+            return "🗑️ Conversation history cleared. Let's start fresh!"
 
-        # 2. Build context
+        # 1. Build user content (text + media context if present)
+        content = msg.content or ""
+        if msg.media:
+            media_type = msg.metadata.get("media_type", "file")
+            media_desc = ", ".join(msg.media)
+            content = (
+                f"{content}\n\n"
+                f"[User attached {media_type} file(s) saved at: {media_desc}. "
+                f"You can read or analyze these files using your tools.]"
+            ).strip()
+
+        # 2. Record user message in session
+        self.session.add_message(msg.chat_id, "user", content)
+
+        # 3. Build context
         messages = self.context_builder.build(msg.chat_id)
 
         # 3. Tool definitions for the LLM

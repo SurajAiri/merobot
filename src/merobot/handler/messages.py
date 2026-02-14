@@ -10,7 +10,8 @@ class InboundMessage:
     sender_id: str
     chat_id: str
     timestamp: float
-    media: list[str] = field(default_factory=list)  # URLs or media identifiers
+    media: list[str] = field(default_factory=list)  # Local file paths or media IDs
+    media_type: str | None = None  # "photo", "document", "audio", "voice", "video"
     metadata: dict = field(
         default_factory=dict
     )  # Additional info like attachments, reactions, etc.
