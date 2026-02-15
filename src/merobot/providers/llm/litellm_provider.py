@@ -47,6 +47,9 @@ class LiteLLMProvider(BaseLLMProvider):
            messages with the results, and call ``generate_response`` again.
         3. Repeat until the model replies with pure text (no tool calls).
         """
+        if not model.startswith(self.config.slug):
+            model = f"{self.config.slug}/{model}"
+
         kwargs: dict = {
             "model": model,
             "messages": messages,

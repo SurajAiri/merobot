@@ -3,7 +3,7 @@
         "workspace_path": "~/.merobot/workspace",
         "default": {
             "provider": "groq",
-            "model": "groq/openai/gpt-oss-120b",
+            "model": "openai/gpt-oss-120b",
             "temperature": 0.7,
             "max_tokens": 2048
         }
@@ -21,7 +21,7 @@
             "name": "Groq",
             "slug": "groq",
             "api_key": "GROQ_API_KEY",
-            "enabled": false,
+            "enabled": true,
             "api_base": "https://api.groq.com/openai/v1",
             "adapters": "openai"
         },
@@ -29,7 +29,7 @@
             "name": "NVIDIA",
             "slug": "nvidia_nim",
             "api_key": "NVIDIA_API_KEY",
-            "enabled": false,
+            "enabled": true,
             "api_base": "https://integrate.api.nvidia.com/v1/",
             "adapters": "openai"
         }

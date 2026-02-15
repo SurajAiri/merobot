@@ -8,8 +8,6 @@ MessageBus (inbound side) and the LLM provider, orchestrating:
     4. Response publishing back to the bus
 """
 
-from __future__ import annotations
-
 import json
 
 from loguru import logger
@@ -20,7 +18,7 @@ from merobot.config import get_config
 from merobot.handler.message_bus import MessageBus
 from merobot.handler.messages import InboundMessage, OutboundMessage
 from merobot.handler.session.session import SessionManager
-from merobot.providers.llm import LiteLLMProvider
+from merobot.providers.llm import BaseLLMProvider
 from merobot.tools import (
     CodeExecutorTool,
     DateTimeTool,
@@ -42,6 +40,7 @@ class AgentLoop:
         self,
         message_bus: MessageBus,
         session_manager: SessionManager,
+        llm: BaseLLMProvider,
     ) -> None:
         self.config = get_config()
         self.message_bus = message_bus
@@ -49,8 +48,7 @@ class AgentLoop:
 
         # LLM setup
         self.model_config = self.config.agent.defaults
-        provider_config = self.config.providers[self.model_config.provider]
-        self.llm = LiteLLMProvider(provider_config)
+        self.llm = llm
 
         # Context builder
         self.context_builder = AgentContextBuilder(session_manager)
