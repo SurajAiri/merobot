@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from merobot.agents.loop import AgentLoop
+from merobot.config import ProviderConfig
 from merobot.handler.message_bus import MessageBus
 from merobot.handler.messages import InboundMessage
 from merobot.handler.session.session import SessionManager
@@ -45,7 +46,10 @@ def agent_loop(bus, session):
         config = AsyncMock()
         config.agent.defaults = defaults
         config.providers = {
-            "litellm": AsyncMock(api_key="test-key")
+            "litellm": ProviderConfig(
+                name="litellm", slug="litellm",
+                api_key="test-key", enabled=True,
+            )
         }
         mock_config.return_value = config
 

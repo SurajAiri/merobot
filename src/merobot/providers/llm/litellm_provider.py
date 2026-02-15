@@ -26,23 +26,6 @@ class LiteLLMProvider(BaseLLMProvider):
 
     name: str = "litellm"
 
-    def __init__(
-        self,
-        api_key: str | None = None,
-        api_base: str | None = None,
-        default_headers: dict[str, str] | None = None,
-    ) -> None:
-        """Optional overrides for the LiteLLM client.
-
-        LiteLLM reads keys from env vars automatically
-        (``OPENAI_API_KEY``, ``ANTHROPIC_API_KEY``, …).
-        Only pass ``api_key`` / ``api_base`` if you need an explicit override
-        (e.g. a proxy, or a single shared key).
-        """
-        self._api_key = api_key
-        self._api_base = api_base
-        self._default_headers = default_headers or {}
-
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------

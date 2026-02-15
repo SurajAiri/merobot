@@ -49,8 +49,8 @@ class AgentLoop:
 
         # LLM setup
         self.model_config = self.config.agent.defaults
-        api_token = self.config.providers[self.model_config.provider].api_key
-        self.llm = LiteLLMProvider(api_token)
+        provider_config = self.config.providers[self.model_config.provider]
+        self.llm = LiteLLMProvider(provider_config)
 
         # Context builder
         self.context_builder = AgentContextBuilder(session_manager)

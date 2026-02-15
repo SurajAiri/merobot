@@ -105,8 +105,8 @@ class ProviderConfig:
     name: str
     slug: str
     api_key: str | None = None  # Already resolved from env
-    enabled: bool = False
     api_base: str = ""
+    enabled: bool = False
     adapters: str = "openai"
 
 

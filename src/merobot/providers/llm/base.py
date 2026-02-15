@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
+from merobot.config import ProviderConfig
+
 
 @dataclass
 class ToolCallRequests:
@@ -59,6 +61,17 @@ class BaseLLMProvider(ABC):
     """
 
     name: str = "base"
+
+    def __init__(self, config: ProviderConfig) -> None:
+        """Initialise the provider from a resolved ``ProviderConfig``.
+
+        The config object already contains the API key (resolved from
+        env vars / secret vault) and optional ``api_base`` override.
+        """
+        self.config = config
+        self._api_key = config.api_key
+        self._api_base = config.api_base or None
+        self._default_headers: dict[str, str] = {}
 
     @abstractmethod
     async def generate_response(

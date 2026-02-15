@@ -2,8 +2,8 @@
     "agent": {
         "workspace_path": "~/.merobot/workspace",
         "default": {
-            "provider": "nvidia",
-            "model": "nvidia_nim/z-ai/glm5",
+            "provider": "groq",
+            "model": "groq/openai/gpt-oss-120b",
             "temperature": 0.7,
             "max_tokens": 2048
         }
@@ -22,7 +22,7 @@
             "slug": "groq",
             "api_key": "GROQ_API_KEY",
             "enabled": false,
-            "api_base": "https://api.groq.com/v1",
+            "api_base": "https://api.groq.com/openai/v1",
             "adapters": "openai"
         },
         "nvidia": {
