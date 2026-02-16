@@ -17,7 +17,6 @@ from merobot.handler.messages import InboundMessage
 from merobot.handler.session.session import SessionManager
 from merobot.providers.llm.base import LLMResponse, ToolCallRequests
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

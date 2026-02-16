@@ -114,13 +114,12 @@ class FileReadTool(BaseTool):
                     f"```\n{content}\n```\n\n"
                     f"*[...truncated, {size - max_bytes:,} bytes remaining]*"
                 )
-            else:
-                content = filepath.read_text(encoding="utf-8", errors="replace")
-                return (
-                    f"**File**: {filepath.relative_to(sandbox)}\n"
-                    f"**Size**: {size:,} bytes\n\n"
-                    f"```\n{content}\n```"
-                )
+            content = filepath.read_text(encoding="utf-8", errors="replace")
+            return (
+                f"**File**: {filepath.relative_to(sandbox)}\n"
+                f"**Size**: {size:,} bytes\n\n"
+                f"```\n{content}\n```"
+            )
         except PermissionError:
             return f"Error: Permission denied reading '{user_path}'."
         except Exception as e:

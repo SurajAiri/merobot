@@ -1,7 +1,7 @@
 """Build the LLM message list from system prompt + conversation history.
 
 The AgentContextBuilder is the single place that assembles the ``messages``
-list passed to ``LiteLLMProvider.generate_response()``.
+list passed to ``BaseLLMProvider.generate_response()``.
 
 Layers (top → bottom of the messages list):
     1. System prompt — personality & instructions

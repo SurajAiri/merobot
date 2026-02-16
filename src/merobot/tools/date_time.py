@@ -75,7 +75,7 @@ class DateTimeTool(BaseTool):
 
         # Build a rich response
         lines = [
-            f"**Current Date & Time**",
+            "**Current Date & Time**",
             f"- **Formatted**: {formatted}",
             f"- **ISO 8601**: {now.isoformat()}",
             f"- **Timezone**: {tz_name} (UTC offset: {now.strftime('%z')})",

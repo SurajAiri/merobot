@@ -14,7 +14,7 @@ from merobot.config import get_config
 from merobot.handler.handler import CommunicationHandler
 from merobot.handler.message_bus import MessageBus
 from merobot.handler.session.session import SessionManager
-from merobot.providers.llm import LiteLLMProvider, LlmApiProvider
+from merobot.providers.llm import LlmApiProvider
 
 
 class Application:
@@ -42,8 +42,8 @@ class Application:
         # Agent loop — consumes inbound, calls LLM, publishes outbound
         self.model_config = self._config.agent.defaults
         provider_config = self._config.providers[self.model_config.provider]
-        self.llm = LiteLLMProvider(provider_config)
-        # self.llm = LlmApiProvider(provider_config)
+        # self.llm = LiteLLMProvider(provider_config)
+        self.llm = LlmApiProvider(provider_config)
         self.agent_loop = AgentLoop(
             message_bus=self.message_bus,
             session_manager=self.session_manager,

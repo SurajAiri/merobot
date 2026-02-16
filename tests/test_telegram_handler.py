@@ -12,7 +12,6 @@ import pytest
 from merobot.handler.channels.telegram import TelegramChannelHandler
 from merobot.handler.messages import OutboundMessage
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
